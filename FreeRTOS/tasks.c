@@ -297,7 +297,7 @@ typedef struct tskTaskControlBlock
 		xMPU_SETTINGS	xMPUSettings;		/*< The MPU settings are defined as part of the port layer.  THIS MUST BE THE SECOND MEMBER OF THE TCB STRUCT. */
 	#endif
 
-	ListItem_t			xStateListItem;	/*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
+	ListItem_t			xStateListItem;	    /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
 	ListItem_t			xEventListItem;		/*< Used to reference a task from an event list. */
 	UBaseType_t			uxPriority;			/*< The priority of the task.  0 is the lowest priority. */
 	StackType_t			*pxStack;			/*< Points to the start of the stack. */
@@ -1585,7 +1585,7 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 			traceTASK_SUSPEND( pxTCB );
 
 			/* Remove task from the ready/delayed list and place in the suspended list. */
-			/* 从就绪/延迟列表中删除任务，然后将其放置在挂起的列表中 */
+			/* 从就绪/延迟列表中删除任务 */
 			if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
 			{
 				taskRESET_READY_PRIORITY( pxTCB->uxPriority );
@@ -1596,6 +1596,7 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 			}
 
 			/* Is the task waiting on an event also? */
+			/* 该任务是否还需要等待其他事件？如果是则删除该事件的的事件列表 */
 			if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
 			{
 				( void ) uxListRemove( &( pxTCB->xEventListItem ) );
@@ -1605,14 +1606,15 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 				mtCOVERAGE_TEST_MARKER();
 			}
 
+			/* 将该任务从就绪列表中删除后，添加到挂起列表的表尾 */
 			vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
 		}
 		taskEXIT_CRITICAL();
 
 		if( xSchedulerRunning != pdFALSE )
 		{
-			/* Reset the next expected unblock time in case it referred to the
-			task that is now in the Suspended state. */
+			/* Reset the next expected unblock time in case it referred to the task that is now in the Suspended state. */
+			/* 重新计算解锁任务的时间， 也就是下一个任务的解锁时间  PS: 为什么 */
 			taskENTER_CRITICAL();
 			{
 				prvResetNextTaskUnblockTime();
@@ -1629,24 +1631,28 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 			if( xSchedulerRunning != pdFALSE )
 			{
 				/* The current task has just been suspended. */
+				/* 当前任务被挂起，任务调度器还在运行，就需要强制进行一次任务切换 */
 				configASSERT( uxSchedulerSuspended == 0 );
 				portYIELD_WITHIN_API();
 			}
 			else
 			{
-				/* The scheduler is not running, but the task that was pointed
-				to by pxCurrentTCB has just been suspended and pxCurrentTCB
-				must be adjusted to point to a different task. */
+				/* The scheduler is not running, 
+				but the task that was pointed to by pxCurrentTCB has just been suspended and pxCurrentTCB must be adjusted to point to a different task. */
+				/* 调度程序未运行，但是pxCurrentTCB指向的任务刚刚被暂停，并且必须将pxCurrentTCB调整为指向另一个任务 */
+				/* PS: listCURRENT_LIST_LENGTH() == 0 是判断是不是所有任务都被挂起，但是基本不会存在这种情况的。 */
 				if( listCURRENT_LIST_LENGTH( &xSuspendedTaskList ) == uxCurrentNumberOfTasks )
 				{
 					/* No other tasks are ready, so set pxCurrentTCB back to
 					NULL so when the next task is created pxCurrentTCB will
 					be set to point to it no matter what its relative priority
 					is. */
+					/* 如果所有任务都被挂起的话，pxCurrentTCB只能为NULL */
 					pxCurrentTCB = NULL;
 				}
 				else
 				{
+					/* 还有任务没有被挂起，就获取下一个要执行的任务 */
 					vTaskSwitchContext();
 				}
 			}
@@ -1664,23 +1670,24 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 
 	static BaseType_t prvTaskIsTaskSuspended( const TaskHandle_t xTask )
 	{
-	BaseType_t xReturn = pdFALSE;
-	const TCB_t * const pxTCB = ( TCB_t * ) xTask;
+		BaseType_t xReturn = pdFALSE;
+		const TCB_t * const pxTCB = ( TCB_t * ) xTask;
 
-		/* Accesses xPendingReadyList so must be called from a critical
-		section. */
+		/* Accesses xPendingReadyList so must be called from a critical section. */
 
 		/* It does not make sense to check if the calling task is suspended. */
 		configASSERT( xTask );
 
 		/* Is the task being resumed actually in the suspended list? */
+		/* 任务实际上是否已在暂停列表中恢复？ */
 		if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
 		{
 			/* Has the task already been resumed from within an ISR? */
+			/* 任务已经从ISR中恢复了吗？ */
 			if( listIS_CONTAINED_WITHIN( &xPendingReadyList, &( pxTCB->xEventListItem ) ) == pdFALSE )
 			{
-				/* Is it in the suspended list because it is in the	Suspended
-				state, or because is is blocked with no timeout? */
+				/* Is it in the suspended list because it is in the	Suspended state, or because is is blocked with no timeout? */
+				/* 是因为它处于“已暂停”状态，还是因为被阻止而没有超时，它是否处于暂停列表中？ */
 				if( listIS_CONTAINED_WITHIN( NULL, &( pxTCB->xEventListItem ) ) != pdFALSE )
 				{
 					xReturn = pdTRUE;
@@ -1710,32 +1717,34 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB )
 
 	void vTaskResume( TaskHandle_t xTaskToResume )
 	{
-	TCB_t * const pxTCB = ( TCB_t * ) xTaskToResume;
+		TCB_t * const pxTCB = ( TCB_t * ) xTaskToResume;
 
 		/* It does not make sense to resume the calling task. */
 		configASSERT( xTaskToResume );
 
-		/* The parameter cannot be NULL as it is impossible to resume the
-		currently executing task. */
+		/* The parameter cannot be NULL as it is impossible to resume the currently executing task. */
+		/* 要恢复的任务不能为NULL或者为当前正在运行的任务 */
 		if( ( pxTCB != NULL ) && ( pxTCB != pxCurrentTCB ) )
 		{
 			taskENTER_CRITICAL();
 			{
+				/* 确保要恢复的任务是挂起的 */
 				if( prvTaskIsTaskSuspended( pxTCB ) != pdFALSE )
 				{
 					traceTASK_RESUME( pxTCB );
 
-					/* As we are in a critical section we can access the ready
-					lists even if the scheduler is suspended. */
+					/* As we are in a critical section we can access the ready lists even if the scheduler is suspended. */
+					/* 将任务从挂起任务列表中删除 */
 					( void ) uxListRemove(  &( pxTCB->xStateListItem ) );
+					/* 将任务加入就绪任务列表 */
 					prvAddTaskToReadyList( pxTCB );
 
 					/* We may have just resumed a higher priority task. */
+					/* 要恢复的任务优先级要高于当前任务. */
 					if( pxTCB->uxPriority >= pxCurrentTCB->uxPriority )
 					{
-						/* This yield may not cause the task just resumed to run,
-						but will leave the lists in the correct state for the
-						next yield. */
+						/* This yield may not cause the task just resumed to run, but will leave the lists in the correct state for the next yield. PS: 看不懂写的啥意思*/
+						/* 要恢复的任务优先级高于当前任务，所有需要进行一次任务切换 */
 						taskYIELD_IF_USING_PREEMPTION();
 					}
 					else
