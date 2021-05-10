@@ -4,15 +4,6 @@
 #include "led.h"
 #include "FreeRTOS.h"
 #include "task.h"
-/************************************************
- ALIENTEK 阿波罗STM32F429开发板 FreeRTOS实验2-1
- FreeRTOS移植实验-HAL库版本
- 技术支持：www.openedv.com
- 淘宝店铺：http://eboard.taobao.com 
- 关注微信公众平台微信号："正点原子"，免费获取STM32资料。
- 广州市星翼电子科技有限公司  
- 作者：正点原子 @ALIENTEK
-************************************************/
 
 //任务优先级
 #define START_TASK_PRIO		1

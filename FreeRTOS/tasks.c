@@ -209,10 +209,13 @@ a statically allocated stack and a dynamically allocated TCB. */
 
 	#define taskSELECT_HIGHEST_PRIORITY_TASK()														\
 	{																								\
-	UBaseType_t uxTopPriority;																		\
+		UBaseType_t uxTopPriority;																	\
 																									\
 		/* Find the highest priority list that contains ready tasks. */								\
+		/* 查找包含就绪任务的最高优先级列表 . */													    \
+		/* #define portGET_HIGHEST_PRIORITY( uxTopPriority, uxReadyPriorities ) uxTopPriority = ( 31UL - ( uint32_t ) __clz( ( uxReadyPriorities ) ) ) */								        														    \
 		portGET_HIGHEST_PRIORITY( uxTopPriority, uxTopReadyPriority );								\
+
 		configASSERT( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ uxTopPriority ] ) ) > 0 );		\
 		listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopPriority ] ) );		\
 	} /* taskSELECT_HIGHEST_PRIORITY_TASK() */
@@ -2037,34 +2040,38 @@ BaseType_t xTaskResumeAll( void )
 TCB_t *pxTCB = NULL;
 BaseType_t xAlreadyYielded = pdFALSE;
 
-	/* If uxSchedulerSuspended is zero then this function does not match a
-	previous call to vTaskSuspendAll(). */
+	/* If uxSchedulerSuspended is zero then this function does not match a previous call to vTaskSuspendAll(). */
+	/* uxSchedulerSuspended 是挂起嵌套计数器， 调度器挂起是支持嵌套的 ,只有该值为零调度器才可以运行*/
 	configASSERT( uxSchedulerSuspended );
 
-	/* It is possible that an ISR caused a task to be removed from an event
-	list while the scheduler was suspended.  If this was the case then the
-	removed task will have been added to the xPendingReadyList.  Once the
-	scheduler has been resumed it is safe to move all the pending ready
-	tasks from this list into their appropriate ready list. */
+	/* It is possible that an ISR caused a task to be removed from an event list while the scheduler was suspended.  
+	If this was the case then the removed task will have been added to the xPendingReadyList.  
+	Once the scheduler has been resumed it is safe to move all the pending ready tasks from this list into their appropriate ready list. */
+	/*在挂起调度程序的过程中，ISR可能导致任务从事件列表中删除。 
+	  如果是这种情况，那么删除的任务将被添加到xPendingReadyList中。 
+	  恢复调度程序后，可以安全地将所有待处理的就绪任务从该列表移至其相应的就绪列表*/
 	taskENTER_CRITICAL();
 	{
+		/* 调度器挂起嵌套计数器 uxSchedulerSuspended 减一 */
 		--uxSchedulerSuspended;
 
+		/* 如果 uxSchedulerSuspended 为 0 说明所有的挂起都已经解除，调度器可以开始运行了 */
 		if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )
 		{
 			if( uxCurrentNumberOfTasks > ( UBaseType_t ) 0U )
 			{
-				/* Move any readied tasks from the pending list into the
-				appropriate ready list. */
+				/* Move any readied tasks from the pending list into the appropriate ready list. */
+				/* 将所有已完成的这些任务从列表 xPendingReadyList移至适当的就绪列表. */
 				while( listLIST_IS_EMPTY( &xPendingReadyList ) == pdFALSE )
 				{
+					/*遍历列表 xPendingReadyList，获取挂到列表 xPendingReadyList 上的任务对应的任务控制块*/
 					pxTCB = ( TCB_t * ) listGET_OWNER_OF_HEAD_ENTRY( ( &xPendingReadyList ) );
 					( void ) uxListRemove( &( pxTCB->xEventListItem ) );
 					( void ) uxListRemove( &( pxTCB->xStateListItem ) );
 					prvAddTaskToReadyList( pxTCB );
 
-					/* If the moved task has a priority higher than the current
-					task then a yield must be performed. */
+					/* If the moved task has a priority higher than the current task then a yield must be performed. */
+					/* 判断任务的优先级是否高于当前正在运行的任务，如果是的话需要将 xYieldPending 标记为 pdTRUE，表示需要进行任务切换 */
 					if( pxTCB->uxPriority >= pxCurrentTCB->uxPriority )
 					{
 						xYieldPending = pdTRUE;
@@ -2123,6 +2130,7 @@ BaseType_t xAlreadyYielded = pdFALSE;
 						xAlreadyYielded = pdTRUE;
 					}
 					#endif
+					/* 调用函数 portYIELD()来完成任务切换 */
 					taskYIELD_IF_USING_PREEMPTION();
 				}
 				else
@@ -2780,8 +2788,8 @@ void vTaskSwitchContext( void )
 {
 	if( uxSchedulerSuspended != ( UBaseType_t ) pdFALSE )
 	{
-		/* The scheduler is currently suspended - do not allow a context
-		switch. */
+		/* The scheduler is currently suspended - do not allow a context switch. */
+		/* 如果调度器挂起那就不能进行任务切换. */
 		xYieldPending = pdTRUE;
 	}
 	else
@@ -2819,8 +2827,8 @@ void vTaskSwitchContext( void )
 		/* Check for stack overflow, if configured. */
 		taskCHECK_FOR_STACK_OVERFLOW();
 
-		/* Select a new task to run using either the generic C or port
-		optimised asm code. */
+		/* Select a new task to run using either the generic C or port optimised asm code. */
+		/* 获取下一个要运行的任务. */
 		taskSELECT_HIGHEST_PRIORITY_TASK();
 		traceTASK_SWITCHED_IN();
 

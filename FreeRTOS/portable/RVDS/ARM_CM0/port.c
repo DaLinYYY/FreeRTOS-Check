@@ -228,10 +228,12 @@ void vPortEndScheduler( void )
 void vPortYield( void )
 {
 	/* Set a PendSV to request a context switch. */
+	/* 设置PendSV以请求上下文切换. */
+	/* 通过向中断控制和壮态寄存器 ICSR 的 bit28 写入 1 挂起 PendSV 来启动 PendSV 中断. */
 	*( portNVIC_INT_CTRL ) = portNVIC_PENDSVSET;
 
-	/* Barriers are normally not required but do ensure the code is completely
-	within the specified behaviour for the architecture. */
+	/* Barriers are normally not required but do ensure the code is completely within the specified behaviour for the architecture. */
+	/* 障碍通常是不需要的，但要确保代码完全符合体系结构的指定行为. */
 	__dsb( portSY_FULL_READ_WRITE );
 	__isb( portSY_FULL_READ_WRITE );
 }

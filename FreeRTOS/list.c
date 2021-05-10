@@ -211,8 +211,7 @@ const TickType_t xValueOfInsertion = pxNewListItem->xItemValue;
 
 UBaseType_t uxListRemove( ListItem_t * const pxItemToRemove )
 {
-/* The list item knows which list it is in.  Obtain the list from the list
-item. */
+/* The list item knows which list it is in.  Obtain the list from the list item. */
 List_t * const pxList = ( List_t * ) pxItemToRemove->pvContainer;
 
 	pxItemToRemove->pxNext->pxPrevious = pxItemToRemove->pxPrevious;
