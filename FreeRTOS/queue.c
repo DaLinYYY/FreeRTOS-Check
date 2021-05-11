@@ -729,6 +729,18 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength, const UBaseT
 #endif /* ( ( configUSE_COUNTING_SEMAPHORES == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) ) */
 /*-----------------------------------------------------------*/
 
+/*  xQueue： 		队列句柄，指明要向哪个队列发送数据，创建队列成功以后会返回此队列的队列句柄。
+	pvItemToQueue：	指向要发送的消息，发送的过程中会将这个消息拷贝到队列中。
+	xTicksToWait： 	阻塞时间，此参数指示当队列满的时候任务进入阻塞态等待队列空闲的最大时间。如果为 0 的话当队列满的时候就立即返回； 
+					当为 portMAX_DELAY 的话就会一直等待，直到队列有空闲的队列项，也就是死等，但是宏INCLUDE_vTaskSuspend 必须为 1
+	xCopyPosition: 	入队方式，有三种入队方式：
+					queueSEND_TO_BACK： 	后向入队
+					queueSEND_TO_FRONT： 	前向入队
+					queueOVERWRITE： 		覆写入队。
+	返回值：
+					pdTRUE： 		向队列发送消息成功！
+					errQUEUE_FULL: 	队列已经满了，消息发送失败。
+*/
 BaseType_t xQueueGenericSend( QueueHandle_t xQueue, const void * const pvItemToQueue, TickType_t xTicksToWait, const BaseType_t xCopyPosition )
 {
 BaseType_t xEntryTimeSet = pdFALSE, xYieldRequired;
@@ -755,7 +767,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 			/* Is there room on the queue now?  The running task must be the highest priority task wanting to access the queue.  
 			If the head item in the queue is to be overwritten then it does not matter if the queue is full. */
 			/* 要向队列发送数据，肯定要先检查一下队列是不是满的，如果是满的话肯定不能发送的。当队列未满或者是覆写入队的话就可以将消息入队了 */
-			if( ( pxQueue->uxMessagesWaiting < pxQueue->uxLength ) || ( xCopyPosition == queueOVERWRITE ) )
+			if( ( pxQueue->uxMessagesWaiting < pxQueue->uxLength ) || ( xCopyPosition == queueOVERWRITE ) ) /* 队列未满 */
 			{
 				traceQUEUE_SEND( pxQueue );
 				xYieldRequired = prvCopyDataToQueue( pxQueue, pvItemToQueue, xCopyPosition );
@@ -766,9 +778,8 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 					{    
 						if( prvNotifyQueueSetContainer( pxQueue, xCopyPosition ) != pdFALSE )
 						{
-							/* The queue is a member of a queue set, and posting
-							to the queue set caused a higher priority task to
-							unblock. A context switch is required. */
+							/* The queue is a member of a queue set, and posting to the queue set caused a higher priority task to unblock. 
+							A context switch is required. */
 							queueYIELD_IF_USING_PREEMPTION();
 						}
 						else
@@ -778,16 +789,15 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 					}    
 					else
 					{
-						/* If there was a task waiting for data to arrive on the
-						queue then unblock it now. */
+						/* If there was a task waiting for data to arrive on the queue then unblock it now. */
+						/* 检查是否有任务由于请求队列消息而阻塞，阻塞的任务会挂在队列的xTasksWaitingToReceive列表上. */
 						if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
 						{
 							if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
 							{
-								/* The unblocked task has a priority higher than
-								our own so yield immediately.  Yes it is ok to
-								do this from within the critical section - the
-								kernel takes care of that. */
+								/* The unblocked task has a priority higher than our own so yield immediately.  
+								Yes it is ok to do this from within the critical section - the kernel takes care of that. */
+								/* 进行任务切换 */
 								queueYIELD_IF_USING_PREEMPTION();
 							}
 							else
@@ -844,25 +854,27 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 				#endif /* configUSE_QUEUE_SETS */
 
 				taskEXIT_CRITICAL();
+				/* 标记入队成功 */
 				return pdPASS;
 			}
-			else
+			else /* 队列满了 */
 			{
 				if( xTicksToWait == ( TickType_t ) 0 )
 				{
-					/* The queue was full and no block time is specified (or
-					the block time has expired) so leave now. */
+					/* 没有阻塞时间，就立即返回 */
+					/* The queue was full and no block time is specified (or the block time has expired) so leave now. */
 					taskEXIT_CRITICAL();
 
-					/* Return to the original privilege level before exiting
-					the function. */
+					/* Return to the original privilege level before exiting he function. */
 					traceQUEUE_SEND_FAILED( pxQueue );
 					return errQUEUE_FULL;
 				}
 				else if( xEntryTimeSet == pdFALSE )
 				{
-					/* The queue was full and a block time was specified so
-					configure the timeout structure. */
+					/* 如果阻塞时间不为 0 并且时间结构体还没有初始化的话就初始化一次超时结构体变量 */
+					/* The queue was full and a block time was specified so onfigure the timeout structure. */
+
+					/* 完成超时结构体变量 xTimeOut 的初始化:  其实就是记录当前的系统时钟节拍计数器的值 xTickCount 和溢出次数 xNumOfOverflows*/
 					vTaskSetTimeOutState( &xTimeOut );
 					xEntryTimeSet = pdTRUE;
 				}
@@ -875,44 +887,49 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 		}
 		taskEXIT_CRITICAL();
 
-		/* Interrupts and other tasks can send to and receive from the queue
-		now the critical section has been exited. */
+		/* Interrupts and other tasks can send to and receive from the queue now the critical section has been exited. */
 
+		/* 任务调度器上锁， 代码执行到这里说明当前的状况是队列已满了，而且设置了不为0的阻塞时间。
+		那么接下来就要对任务采取相应的措施了 ，比如将任务加入到队列的xTasksWaitingToSend 列表中 */
 		vTaskSuspendAll();
+		/* 队列上锁:  其实就是将队列中的成员变量 cRxLock 和cTxLock 设置为 queueLOCKED_UNMODIFIED*/
 		prvLockQueue( pxQueue );
 
 		/* Update the timeout state to see if it has expired yet. */
+		/* 更新超时状态以查看其是否已过期 */
 		if( xTaskCheckForTimeOut( &xTimeOut, &xTicksToWait ) == pdFALSE )
 		{
+			/* 阻塞时间还没到，队列是满的 */
 			if( prvIsQueueFull( pxQueue ) != pdFALSE )
 			{
 				traceBLOCKING_ON_QUEUE_SEND( pxQueue );
+				/* 阻塞时间还没到，且队列是满的，，就将任务添加到队列的 xTasksWaitingToSend 列表中和延时列表中，并且将任务从就绪列表中移除 */
+				/* PS: 如果阻塞时间是portMAX_DELAY并且宏INCLUDE_vTaskSuspend为1的话，函数vTaskPlaceOnEventList()会将任务添加到列表xSuspendedTaskList 上 */
 				vTaskPlaceOnEventList( &( pxQueue->xTasksWaitingToSend ), xTicksToWait );
 
-				/* Unlocking the queue means queue events can effect the
-				event list.  It is possible	that interrupts occurring now
-				remove this task from the event	list again - but as the
-				scheduler is suspended the task will go onto the pending
-				ready last instead of the actual ready list. */
+				/* Unlocking the queue means queue events can effect the event list.  
+				It is possible	that interrupts occurring now remove this task from the event list again - 
+				but as the scheduler is suspended the task will go onto the pending ready last instead of the actual ready list. */
+				/* 解锁队列 */
 				prvUnlockQueue( pxQueue );
 
-				/* Resuming the scheduler will move tasks from the pending
-				ready list into the ready list - so it is feasible that this
-				task is already in a ready list before it yields - in which
-				case the yield will not cause a context switch unless there
-				is also a higher priority task in the pending ready list. */
-				if( xTaskResumeAll() == pdFALSE )
+				/* Resuming the scheduler will move tasks from the pending ready list into the ready list 
+				- so it is feasible that this task is already in a ready list before it yields 
+				- in which case the yield will not cause a context switch unless there is also a higher priority task in the pending ready list. */
+				if( xTaskResumeAll() == pdFALSE )  /* 恢复任务调度器 */
 				{
 					portYIELD_WITHIN_API();
 				}
 			}
-			else
+			/* 阻塞时间还没到，但是队列现在有空闲的队列项，那么就在重试一次 */
+			else 
 			{
 				/* Try again. */
 				prvUnlockQueue( pxQueue );
 				( void ) xTaskResumeAll();
 			}
 		}
+		/* 阻塞时间到了！那么任务就不用添加到那些列表中了，那就解锁队列，恢复任务调度器 */
 		else
 		{
 			/* The timeout has expired. */
@@ -920,6 +937,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 			( void ) xTaskResumeAll();
 
 			traceQUEUE_SEND_FAILED( pxQueue );
+			/* 返回 errQUEUE_FULL，表示队列满了 */
 			return errQUEUE_FULL;
 		}
 	}
