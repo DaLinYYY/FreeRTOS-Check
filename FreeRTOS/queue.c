@@ -129,35 +129,35 @@ zero. */
  */
 typedef struct QueueDefinition
 {
-	int8_t *pcHead;					/*< Points to the beginning of the queue storage area. */
-	int8_t *pcTail;					/*< Points to the byte at the end of the queue storage area.  Once more byte is allocated than necessary to store the queue items, this is used as a marker. */
-	int8_t *pcWriteTo;				/*< Points to the free next place in the storage area. */
+	int8_t *pcHead;					/*< 指向队列存储区开始地址 		Points to the beginning of the queue storage area. */
+	int8_t *pcTail;					/*< 指向队列存储区最后一个字节 	Points to the byte at the end of the queue storage area.  Once more byte is allocated than necessary to store the queue items, this is used as a marker. */
+	int8_t *pcWriteTo;				/*< 指向存储区中下一个空闲区域 	Points to the free next place in the storage area. */
 
-	union							/* Use of a union is an exception to the coding standard to ensure two mutually exclusive structure members don't appear simultaneously (wasting RAM). */
+	union							/* 使用联合体，以确保两个互斥的结构成员不会同时出现（浪费RAM）Use of a union is an exception to the coding standard to ensure two mutually exclusive structure members don't appear simultaneously (wasting RAM). */
 	{
-		int8_t *pcReadFrom;			/*< Points to the last place that a queued item was read from when the structure is used as a queue. */
-		UBaseType_t uxRecursiveCallCount;/*< Maintains a count of the number of times a recursive mutex has been recursively 'taken' when the structure is used as a mutex. */
+		int8_t *pcReadFrom;			/*< 当用作队列的时候指向最后一个出队的队列项首地址 Points to the last place that a queued item was read from when the structure is used as a queue. */
+		UBaseType_t uxRecursiveCallCount;/*< 当用作递归互斥量的时候用来记录递归互斥量被调用的次数 Maintains a count of the number of times a recursive mutex has been recursively 'taken' when the structure is used as a mutex. */
 	} u;
 
-	List_t xTasksWaitingToSend;		/*< List of tasks that are blocked waiting to post onto this queue.  Stored in priority order. */
-	List_t xTasksWaitingToReceive;	/*< List of tasks that are blocked waiting to read from this queue.  Stored in priority order. */
+	List_t xTasksWaitingToSend;		/*< 等待发送任务列表，那些因为队列满导致入队失败而进入阻塞态的任务就会挂到此列表上 List of tasks that are blocked waiting to post onto this queue.  Stored in priority order. */
+	List_t xTasksWaitingToReceive;	/*< 等待接收任务列表，那些因为队列空导致出队失败而进入阻塞态的任务就会挂到此列表上 List of tasks that are blocked waiting to read from this queue.  Stored in priority order. */
 
-	volatile UBaseType_t uxMessagesWaiting;/*< The number of items currently in the queue. */
-	UBaseType_t uxLength;			/*< The length of the queue defined as the number of items it will hold, not the number of bytes. */
-	UBaseType_t uxItemSize;			/*< The size of each items that the queue will hold. */
+	volatile UBaseType_t uxMessagesWaiting;/*< 队列中当前队列项数量，也就是消息数 The number of items currently in the queue. */
+	UBaseType_t uxLength;			/*< 创建队列时指定的队列长度，也就是队列中最大允许的队列项(消息)数量 The length of the queue defined as the number of items it will hold, not the number of bytes. */
+	UBaseType_t uxItemSize;			/*< 创建队列时指定的每个队列项(消息)最大长度，单位字节 The size of each items that the queue will hold. */
 
-	volatile int8_t cRxLock;		/*< Stores the number of items received from the queue (removed from the queue) while the queue was locked.  Set to queueUNLOCKED when the queue is not locked. */
-	volatile int8_t cTxLock;		/*< Stores the number of items transmitted to the queue (added to the queue) while the queue was locked.  Set to queueUNLOCKED when the queue is not locked. */
+	volatile int8_t cRxLock;		/*< 当队列上锁以后用来统计从队列中接收到的队列项数量， 也就是出队的队列项数量，当队列没有上锁的话此字段为 queueUNLOCKED   Stores the number of items received from the queue (removed from the queue) while the queue was locked.  Set to queueUNLOCKED when the queue is not locked. */
+	volatile int8_t cTxLock;		/*< 当队列上锁以后用来统计发送到队列中的队列项数量，也就是入队的队列项数量，当队列没有上锁的话此字段为 queueUNLOCKED    Stores the number of items transmitted to the queue (added to the queue) while the queue was locked.  Set to queueUNLOCKED when the queue is not locked. */
 
 	#if( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-		uint8_t ucStaticallyAllocated;	/*< Set to pdTRUE if the memory used by the queue was statically allocated to ensure no attempt is made to free the memory. */
+		uint8_t ucStaticallyAllocated;	/*< 如果使用静态存储的话此字段设置为 pdTURE  Set to pdTRUE if the memory used by the queue was statically allocated to ensure no attempt is made to free the memory. */
 	#endif
 
-	#if ( configUSE_QUEUE_SETS == 1 )
+	#if ( configUSE_QUEUE_SETS == 1 )   //队列集相关宏
 		struct QueueDefinition *pxQueueSetContainer;
 	#endif
 
-	#if ( configUSE_TRACE_FACILITY == 1 )
+	#if ( configUSE_TRACE_FACILITY == 1 )   //跟踪调试相关宏
 		UBaseType_t uxQueueNumber;
 		uint8_t ucQueueType;
 	#endif
@@ -284,6 +284,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 
 	taskENTER_CRITICAL();
 	{
+		/* 初始化队列中的相关成员变量 */
 		pxQueue->pcTail = pxQueue->pcHead + ( pxQueue->uxLength * pxQueue->uxItemSize );
 		pxQueue->uxMessagesWaiting = ( UBaseType_t ) 0U;
 		pxQueue->pcWriteTo = pxQueue->pcHead;
@@ -298,6 +299,8 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 			will still be empty.  If there are tasks blocked waiting to write to
 			the queue, then one should be unblocked as after this function exits
 			it will be possible to write to it. */
+			/* 由于复位队列以后队列依旧是空的，所以对于那些由于出队(从队列中读取消息)而阻塞的任务就依旧保持阻塞壮态。
+			但是对于那些由于入队(向队列中发送消息)而阻塞的任务就不同了，这些任务要解除阻塞壮态，从队列的相应列表中移除 */
 			if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToSend ) ) == pdFALSE )
 			{
 				if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToSend ) ) != pdFALSE )
@@ -317,6 +320,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 		else
 		{
 			/* Ensure the event queues start in the correct state. */
+			/* 初始化队列中的列表 xTasksWaitingToSend 和 xTasksWaitingToReceive */
 			vListInitialise( &( pxQueue->xTasksWaitingToSend ) );
 			vListInitialise( &( pxQueue->xTasksWaitingToReceive ) );
 		}
@@ -398,17 +402,18 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 		}
 		else
 		{
-			/* Allocate enough space to hold the maximum number of items that
-			can be in the queue at any time. */
+			/* Allocate enough space to hold the maximum number of items that can be in the queue at any time. */
+			/* 消息存储区的大小. */
 			xQueueSizeInBytes = ( size_t ) ( uxQueueLength * uxItemSize ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
 		}
 
+		/* 调用函数 pvPortMalloc()给队列分配内存 */
 		pxNewQueue = ( Queue_t * ) pvPortMalloc( sizeof( Queue_t ) + xQueueSizeInBytes );
 
 		if( pxNewQueue != NULL )
 		{
-			/* Jump past the queue structure to find the location of the queue
-			storage area. */
+			/* Jump past the queue structure to find the location of the queue storage area. */
+			/* 计算出消息存储区的首地址.上面申请到的内存是队列结构体和队列中消存储区的总大小，队列结构体内存在前，紧跟在后面的就是消息存储区内存 */
 			pucQueueStorage = ( ( uint8_t * ) pxNewQueue ) + sizeof( Queue_t );
 
 			#if( configSUPPORT_STATIC_ALLOCATION == 1 )
@@ -420,6 +425,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 			}
 			#endif /* configSUPPORT_STATIC_ALLOCATION */
 
+			/* 调用函数prvInitialiseNewQueue()初始化队列 */
 			prvInitialiseNewQueue( uxQueueLength, uxItemSize, pucQueueStorage, ucQueueType, pxNewQueue );
 		}
 
@@ -431,8 +437,8 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 
 static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength, const UBaseType_t uxItemSize, uint8_t *pucQueueStorage, const uint8_t ucQueueType, Queue_t *pxNewQueue )
 {
-	/* Remove compiler warnings about unused parameters should
-	configUSE_TRACE_FACILITY not be set to 1. */
+	/* Remove compiler warnings about unused parameters should configUSE_TRACE_FACILITY not be set to 1. */
+	/* 防止编译器报错. */
 	( void ) ucQueueType;
 
 	if( uxItemSize == ( UBaseType_t ) 0 )
@@ -441,18 +447,21 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength, const UBaseT
 		be set to NULL because NULL is used as a key to say the queue is used as
 		a mutex.  Therefore just set pcHead to point to the queue as a benign
 		value that is known to be within the memory map. */
+		/* 队列项(消息)长度为 0，说明没有队列存储区，这里将 pcHead 指向队列开始地址 */
 		pxNewQueue->pcHead = ( int8_t * ) pxNewQueue;
 	}
 	else
 	{
 		/* Set the head to the start of the queue storage area. */
+		/* 设置 pcHead 指向队列项存储区首地址 */
 		pxNewQueue->pcHead = ( int8_t * ) pucQueueStorage;
 	}
 
-	/* Initialise the queue members as described where the queue type is
-	defined. */
+	/* Initialise the queue members as described where the queue type is defined. */
+	/* 初始化队列结构体相关成员变量 */
 	pxNewQueue->uxLength = uxQueueLength;
 	pxNewQueue->uxItemSize = uxItemSize;
+	/* 调用函数 xQueueGenericReset()复位队列。 */
 	( void ) xQueueGenericReset( pxNewQueue, pdTRUE );
 
 	#if ( configUSE_TRACE_FACILITY == 1 )
@@ -743,10 +752,9 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 	{
 		taskENTER_CRITICAL();
 		{
-			/* Is there room on the queue now?  The running task must be the
-			highest priority task wanting to access the queue.  If the head item
-			in the queue is to be overwritten then it does not matter if the
-			queue is full. */
+			/* Is there room on the queue now?  The running task must be the highest priority task wanting to access the queue.  
+			If the head item in the queue is to be overwritten then it does not matter if the queue is full. */
+			/* 要向队列发送数据，肯定要先检查一下队列是不是满的，如果是满的话肯定不能发送的。当队列未满或者是覆写入队的话就可以将消息入队了 */
 			if( ( pxQueue->uxMessagesWaiting < pxQueue->uxLength ) || ( xCopyPosition == queueOVERWRITE ) )
 			{
 				traceQUEUE_SEND( pxQueue );
@@ -755,7 +763,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 				#if ( configUSE_QUEUE_SETS == 1 )
 				{
 					if( pxQueue->pxQueueSetContainer != NULL )
-					{
+					{    
 						if( prvNotifyQueueSetContainer( pxQueue, xCopyPosition ) != pdFALSE )
 						{
 							/* The queue is a member of a queue set, and posting
@@ -767,7 +775,7 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 						{
 							mtCOVERAGE_TEST_MARKER();
 						}
-					}
+					}    
 					else
 					{
 						/* If there was a task waiting for data to arrive on the
