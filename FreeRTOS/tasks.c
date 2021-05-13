@@ -3789,35 +3789,39 @@ static void prvResetNextTaskUnblockTime( void )
 /*-----------------------------------------------------------*/
 
 #if ( configUSE_MUTEXES == 1 )
-
+	/* 处理优先级继承 */
 	BaseType_t xTaskPriorityDisinherit( TaskHandle_t const pxMutexHolder )
 	{
 	TCB_t * const pxTCB = ( TCB_t * ) pxMutexHolder;
 	BaseType_t xReturn = pdFALSE;
 
+		/* 函数的参数 pxMutexHolder 表示拥有此互斥信号量任务控制块，所以要先判断此互斥信号量是否已经被其他任务获取 */
 		if( pxMutexHolder != NULL )
 		{
 			/* A task can only have an inherited priority if it holds the mutex.
-			If the mutex is held by a task then it cannot be given from an
-			interrupt, and if a mutex is given by the holding task then it must
-			be the running state task. */
+			If the mutex is held by a task then it cannot be given from an interrupt, and if a mutex is given by the holding task then it must be the running state task. */
+		    /* 当一个任务获取到互斥信号量以后就会涉及到优先级继承的问题，正在释放互斥信号量的任务肯定是当前正在运行的任务 pxCurrentTCB */
 			configASSERT( pxTCB == pxCurrentTCB );
-
 			configASSERT( pxTCB->uxMutexesHeld );
+
+			/* 	有的任务可能会获取多个互斥信号量，所以就需要标记任务当前获取到的互斥信号量个数，任务控制块结构体的成员变量 uxMutexesHeld 用来保存当前任务获取到的互斥信号量个数。
+				任务每释放一次互斥信号量，变量 uxMutexesHeld 肯定就要减一 */
 			( pxTCB->uxMutexesHeld )--;
 
-			/* Has the holder of the mutex inherited the priority of another
-			task? */
+			/* Has the holder of the mutex inherited the priority of another task? */
+			/* 	互斥量持有者是否继承了另一个任务的优先级？
+				如果存在的话任务当前优先级肯定和任务基优先级不同 */
 			if( pxTCB->uxPriority != pxTCB->uxBasePriority )
 			{
 				/* Only disinherit if no other mutexes are held. */
+				/* 仅当没有其他互斥体时才取消继承. */ 
+				
+				/*  判断当前释放的是不是任务所获取到的最后一个互斥信号量 */
 				if( pxTCB->uxMutexesHeld == ( UBaseType_t ) 0 )
 				{
-					/* A task can only have an inherited priority if it holds
-					the mutex.  If the mutex is held by a task then it cannot be
-					given from an interrupt, and if a mutex is given by the
-					holding	task then it must be the running state task.  Remove
-					the	holding task from the ready	list. */
+					/* A task can only have an inherited priority if it holds the mutex.  
+					If the mutex is held by a task then it cannot be given from an interrupt, and if a mutex is given by the holding task then it must be the running state task.  
+					Remove the	holding task from the ready	list. */
 					if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
 					{
 						taskRESET_READY_PRIORITY( pxTCB->uxPriority );
@@ -3827,25 +3831,19 @@ static void prvResetNextTaskUnblockTime( void )
 						mtCOVERAGE_TEST_MARKER();
 					}
 
-					/* Disinherit the priority before adding the task into the
-					new	ready list. */
+					/* Disinherit the priority before adding the task into the new	ready list. */
 					traceTASK_PRIORITY_DISINHERIT( pxTCB, pxTCB->uxBasePriority );
 					pxTCB->uxPriority = pxTCB->uxBasePriority;
 
-					/* Reset the event list item value.  It cannot be in use for
-					any other purpose if this task is running, and it must be
-					running to give back the mutex. */
+					/* Reset the event list item value.  
+					It cannot be in use for any other purpose if this task is running, and it must be running to give back the mutex. */
 					listSET_LIST_ITEM_VALUE( &( pxTCB->xEventListItem ), ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) pxTCB->uxPriority ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
 					prvAddTaskToReadyList( pxTCB );
 
 					/* Return true to indicate that a context switch is required.
-					This is only actually required in the corner case whereby
-					multiple mutexes were held and the mutexes were given back
-					in an order different to that in which they were taken.
-					If a context switch did not occur when the first mutex was
-					returned, even if a task was waiting on it, then a context
-					switch should occur when the last mutex is returned whether
-					a task is waiting on it or not. */
+					This is only actually required in the corner case whereby multiple mutexes were held and the mutexes were given back n an order different to that in which they were taken.
+					If a context switch did not occur when the first mutex was returned, 
+					even if a task was waiting on it, then a context switch should occur when the last mutex is returned whether a task is waiting on it or not. */
 					xReturn = pdTRUE;
 				}
 				else
