@@ -142,7 +142,7 @@ typedef struct QueueDefinition
 	List_t xTasksWaitingToSend;		/*< 等待发送任务列表，那些因为队列满导致入队失败而进入阻塞态的任务就会挂到此列表上 List of tasks that are blocked waiting to post onto this queue.  Stored in priority order. */
 	List_t xTasksWaitingToReceive;	/*< 等待接收任务列表，那些因为队列空导致出队失败而进入阻塞态的任务就会挂到此列表上 List of tasks that are blocked waiting to read from this queue.  Stored in priority order. */
 
-	volatile UBaseType_t uxMessagesWaiting;/*< 队列中当前队列项数量，也就是消息数 The number of items currently in the queue. */
+	volatile UBaseType_t uxMessagesWaiting;		/*< 队列中当前队列项数量，也就是消息数 The number of items currently in the queue. */
 	UBaseType_t uxLength;			/*< 创建队列时指定的队列长度，也就是队列中最大允许的队列项(消息)数量 The length of the queue defined as the number of items it will hold, not the number of bytes. */
 	UBaseType_t uxItemSize;			/*< 创建队列时指定的每个队列项(消息)最大长度，单位字节 The size of each items that the queue will hold. */
 
@@ -743,9 +743,9 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength, const UBaseT
 */
 BaseType_t xQueueGenericSend( QueueHandle_t xQueue, const void * const pvItemToQueue, TickType_t xTicksToWait, const BaseType_t xCopyPosition )
 {
-BaseType_t xEntryTimeSet = pdFALSE, xYieldRequired;
-TimeOut_t xTimeOut;
-Queue_t * const pxQueue = ( Queue_t * ) xQueue;
+	BaseType_t xEntryTimeSet = pdFALSE, xYieldRequired;
+	TimeOut_t xTimeOut;
+	Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 
 	configASSERT( pxQueue );
 	configASSERT( !( ( pvItemToQueue == NULL ) && ( pxQueue->uxItemSize != ( UBaseType_t ) 0U ) ) );
@@ -757,9 +757,8 @@ Queue_t * const pxQueue = ( Queue_t * ) xQueue;
 	#endif
 
 
-	/* This function relaxes the coding standard somewhat to allow return
-	statements within the function itself.  This is done in the interest
-	of execution time efficiency. */
+	/* This function relaxes the coding standard somewhat to allow return statements within the function itself. 
+	 This is done in the interest of execution time efficiency. */
 	for( ;; )
 	{
 		taskENTER_CRITICAL();
@@ -1736,6 +1735,7 @@ UBaseType_t uxMessagesWaiting;
 			if( pxQueue->uxQueueType == queueQUEUE_IS_MUTEX )
 			{
 				/* The mutex is no longer being held. */
+				/* 调用函数 xTaskPriorityDisinherit() 处理互斥信号量的优先级继承问题 */
 				xReturn = xTaskPriorityDisinherit( ( void * ) pxQueue->pxMutexHolder );
 				pxQueue->pxMutexHolder = NULL;
 			}
