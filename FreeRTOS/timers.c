@@ -309,6 +309,13 @@ BaseType_t xReturn = pdFAIL;
 }
 /*-----------------------------------------------------------*/
 
+	/*
+	TimerHandle_t xTimerCreate(	const char * const pcTimerName,    		//软件定时器名字，名字是一串字符串，用于调试使用
+							const TickType_t xTimerPeriodInTicks,		//软件定时器的定时器周期，单位是时钟节拍数
+							const UBaseType_t uxAutoReload,				//设置定时器模式， 单次定时器还是周期定时器？当此参数为 pdTRUE的时候表示创建的是周期定时器
+							void * const pvTimerID,						//定时器 ID 号， 一般情况下每个定时器都有一个回调函数，当定时器定时周期到了以后就会执行这个回调函数
+							TimerCallbackFunction_t pxCallbackFunction)	//定时器回调函数， 当定时器定时周期到了以后就会调用这个函数
+	*/
 #if( configSUPPORT_DYNAMIC_ALLOCATION == 1 )
 
 	TimerHandle_t xTimerCreate(	const char * const pcTimerName,
