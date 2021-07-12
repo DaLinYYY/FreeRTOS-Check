@@ -368,11 +368,9 @@ void vPortEnterCritical( void )
 	portDISABLE_INTERRUPTS();
 	uxCriticalNesting++;
 
-	/* This is not the interrupt safe version of the enter critical function so
-	assert() if it is being called from an interrupt context.  Only API
-	functions that end in "FromISR" can be used in an interrupt.  Only assert if
-	the critical nesting count is 1 to protect against recursive calls if the
-	assert function also uses a critical section. */
+	/* This is not the interrupt safe version of the enter critical function so assert() if it is being called from an interrupt context. 
+	 Only API functions that end in "FromISR" can be used in an interrupt.  
+	 Only assert if the critical nesting count is 1 to protect against recursive calls if the assert function also uses a critical section. */
 	if( uxCriticalNesting == 1 )
 	{
 		configASSERT( ( portNVIC_INT_CTRL_REG & portVECTACTIVE_MASK ) == 0 );

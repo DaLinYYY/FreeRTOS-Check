@@ -685,9 +685,10 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB ) PRIVILEGED_FUNCTION;
 	TCB_t *pxNewTCB;
 	BaseType_t xReturn;
 
-		/* If the stack grows down then allocate the stack then the TCB so the stack
-		does not grow into the TCB.  Likewise if the stack grows up then allocate
-		the TCB then the stack. */
+		/* If the stack grows down then allocate the stack then the TCB so the stack does not grow into the TCB. 
+         Likewise if the stack grows up then allocate the TCB then the stack. */
+		/* 选择栈的增长方向： 如果堆栈向下增长，先分配堆栈后分配TCB，因此堆栈不会增长到TCB 。
+                            如果堆栈向上增长，先分配TCB后分配堆栈*/
 		#if( portSTACK_GROWTH > 0 )
 		{
 			/* Allocate space for the TCB.  Where the memory comes from depends on
@@ -715,6 +716,7 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB ) PRIVILEGED_FUNCTION;
 		StackType_t *pxStack;
 
 			/* Allocate space for the stack used by the task being created. */
+			/* 为正在创建的任务使用的堆栈分配空间. */
 			pxStack = ( StackType_t * ) pvPortMalloc( ( ( ( size_t ) usStackDepth ) * sizeof( StackType_t ) ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
 
 			if( pxStack != NULL )
@@ -729,8 +731,7 @@ static void prvAddNewTaskToReadyList( TCB_t *pxNewTCB ) PRIVILEGED_FUNCTION;
 				}
 				else
 				{
-					/* The stack cannot be used as the TCB was not created.  Free
-					it again. */
+					/* The stack cannot be used as the TCB was not created.  Free it again. */
 					vPortFree( pxStack );
 				}
 			}
